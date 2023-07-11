@@ -7,6 +7,7 @@ import { isFeatureEnabled, reloadCurrentTab } from './utils'
 import { ensureClickToLoadRuleActionDisabled } from './dnr-click-to-load'
 import tdsStorage from './storage/tds'
 import { getArgumentsObject } from './helpers/arguments-object'
+import { isFireButtonEnabled } from './features/fire-button'
 const { getDomain } = require('tldts')
 const utils = require('./utils')
 const settings = require('./settings')
@@ -136,7 +137,10 @@ export async function getPrivacyDashboardData (options) {
     const tab = await getTab(tabId)
     if (!tab) throw new Error('unreachable - cannot access current tab with ID ' + tabId)
     const userData = settings.getSetting('userData')
-    return dashboardDataFromTab(tab, userData)
+    const fireButtonData = {
+        enabled: isFireButtonEnabled
+    }
+    return dashboardDataFromTab(tab, userData, fireButtonData)
 }
 
 export function getTopBlockedByPages (options) {
@@ -214,6 +218,44 @@ export async function unblockClickToLoadContent (data, sender) {
 export function updateYouTubeCTLAddedFlag (value, sender) {
     const tab = tabManager.get({ tabId: sender.tab.id })
     tab.ctlYouTube = Boolean(value)
+}
+
+/**
+ * @typedef updateFacebookCTLBreakageFlagsRequest
+ * @property {boolean} [ctlFacebookPlaceholderShown=false]
+ *   True if at least one Facebook Click to Load placeholder was shown on the
+ *   page.
+ * @property {boolean} [ctlFacebookLogin=false]
+ *   True if the user clicked to use a Facebook Click to Load login button.
+ */
+
+/**
+ * Sets the Facebook Click to Load breakage flag(s) to true for the page, which
+ * are then included should the user report the webpage as broken.
+ * Note: False values are ignored, the flags are only updated if value is true.
+ *       The flags are reset automatically when the user navigates away from
+ *       the page.
+ * @param {updateFacebookCTLBreakageFlagsRequest} flags
+ * @param {browser.Runtime.MessageSender} sender
+ */
+export function updateFacebookCTLBreakageFlags (
+    { ctlFacebookPlaceholderShown = false, ctlFacebookLogin = false },
+    sender
+) {
+    const tabId = sender?.tab?.id
+    if (typeof tabId === 'undefined') {
+        return
+    }
+
+    const tab = tabManager.get({ tabId })
+
+    if (ctlFacebookPlaceholderShown) {
+        tab.ctlFacebookPlaceholderShown = true
+    }
+
+    if (ctlFacebookLogin) {
+        tab.ctlFacebookLogin = true
+    }
 }
 
 export function setYoutubePreviewsEnabled (value, sender) {
@@ -458,6 +500,7 @@ const messageHandlers = {
     getCurrentTab,
     unblockClickToLoadContent,
     updateYouTubeCTLAddedFlag,
+    updateFacebookCTLBreakageFlags,
     setYoutubePreviewsEnabled,
     updateSetting,
     getSetting,
